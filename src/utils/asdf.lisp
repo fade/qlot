@@ -102,19 +102,16 @@
      ,@body))
 
 (defun read-asd-form (form)
-  (labels ((dep-list-name (dep)
-             (ecase (first dep)
-               ((:version :require) (second dep))
-               (:feature (third dep))))
-           (normalize (dep)
+  (labels ((normalize (dep)
+             ;; Return NIL for a (:feature ...) dependency whose feature
+             ;; expression is false in this image, as ASDF does.
              (cond
                ((and (consp dep)
                      (keywordp (car dep)))
-                (let ((name (dep-list-name dep)))
-                  (etypecase name
-                    ((or symbol string) (string-downcase name))
-                    (list (ecase (first name)
-                            (:require (normalize (second name))))))))
+                (ecase (first dep)
+                  ((:version :require) (normalize (second dep)))
+                  (:feature (and (uiop:featurep (second dep))
+                                 (normalize (third dep))))))
                ((or (symbolp dep)
                     (stringp dep))
                 (string-downcase dep))
@@ -134,8 +131,9 @@
                          (remove system-name
                                  (remove-if #'sbcl-contrib-p
                                             (remove-duplicates
-                                              (mapcar #'normalize
-                                                      (append defsystem-depends-on depends-on weakly-depends-on))
+                                              (remove nil
+                                                      (mapcar #'normalize
+                                                              (append defsystem-depends-on depends-on weakly-depends-on)))
                                               :test #'equalp))
                                  :test #'string=)
                          #'string<))
